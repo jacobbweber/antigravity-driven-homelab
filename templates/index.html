@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antigravity Homelab</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1>Antigravity <span class="accent">Homelab</span></h1>
+            <p>Local Hyper-V Orchestration</p>
+        </header>
+
+        <main>
+            <div class="controls">
+                <button id="btn-provision" class="btn primary glow">
+                    <span class="icon">🚀</span> Spin Up Lab
+                </button>
+                <button id="btn-destroy" class="btn danger">
+                    <span class="icon">🔥</span> Destroy Lab
+                </button>
+            </div>
+
+            <section class="dashboard">
+                <div class="card vm-card" id="card-win">
+                    <div class="card-header">
+                        <div class="status-indicator unknown"></div>
+                        <h3>AG-Lab-Win</h3>
+                    </div>
+                    <div class="card-body">
+                        <p>Status: <span id="status-win">Checking...</span></p>
+                        <p>Uptime: <span id="uptime-win">-</span></p>
+                    </div>
+                </div>
+
+                <div class="card vm-card" id="card-linux">
+                    <div class="card-header">
+                        <div class="status-indicator unknown"></div>
+                        <h3>AG-Lab-Linux</h3>
+                    </div>
+                    <div class="card-body">
+                        <p>Status: <span id="status-linux">Checking...</span></p>
+                        <p>Uptime: <span id="uptime-linux">-</span></p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="console-section">
+                <h2>Execution Logs</h2>
+                <div id="console-output" class="console-box">
+                    <div class="log-line system">Waiting for commands...</div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="/static/app.js"></script>
+</body>
+</html>
