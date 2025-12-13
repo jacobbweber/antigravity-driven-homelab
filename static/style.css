@@ -222,3 +222,44 @@ header p {
 ::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.3);
 }
+
+/* Card Actions */
+.card-actions {
+    margin-top: 1rem;
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.btn-sm {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.8rem;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-sm:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.btn-sm.success {
+    color: var(--success);
+    border-color: var(--success);
+}
+.btn-sm.success:hover {
+    background: var(--success);
+    color: #fff;
+}
+
+.btn-sm.danger {
+     color: var(--danger);
+     border-color: var(--danger);
+}
+.btn-sm.danger:hover {
+    background: var(--danger);
+    color: #fff;
+}

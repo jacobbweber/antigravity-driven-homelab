@@ -119,6 +119,56 @@ def get_cpu_temp():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/control', methods=['POST'])
+def control_vm():
+    """Runs Control-VMState.ps1 to change VM state."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Invalid payload"}), 400
+    
+    vm_uuid = data.get('vm_uuid')
+    action = data.get('action')
+    
+    if not vm_uuid or not action:
+        return jsonify({"error": "Missing vm_uuid or action"}), 400
+        
+    script_path = os.path.join(os.getcwd(), 'scripts', 'Control-VMState.ps1')
+    
+    # We run synchronously to capture immediate validation errors (409s)
+    try:
+        # Note: Stop-VM might take time, so this call might block.
+        # For a better UX, we could offload to thread, but then we lose immediate error feedback 
+        # from the script logic (e.g. "Already Running").
+        result = subprocess.run(
+            ["powershell", "-ExecutionPolicy", "Bypass", "-File", script_path, "-VmId", vm_uuid, "-Action", action],
+            capture_output=True,
+            text=True
+        )
+        
+        # If script returns 0, it printed the JSON success object.
+        # If script returns 1 (error), it printed the JSON error object (due to our try/catch in script).
+        # OR it crashed and printed stderr.
+        
+        try:
+            output = json.loads(result.stdout)
+            
+            if output.get('status') == 'error':
+                 # Determine status code based on message
+                 msg = output.get('message', '')
+                 if "already" in msg.lower(): # Basic heuristic for state conflict
+                     return jsonify(output), 409
+                 else:
+                     return jsonify(output), 500
+            
+            return jsonify(output), 202
+
+        except json.JSONDecodeError:
+            # Fallback if script didn't output JSON
+            return jsonify({"error": "Script execution failed (Invalid JSON)", "details": result.stdout + result.stderr}), 500
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/logs')
 def get_logs():
     return jsonify({"logs": LOG_BUFFER})

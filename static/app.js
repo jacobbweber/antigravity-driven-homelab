@@ -18,6 +18,41 @@ document.addEventListener('DOMContentLoaded', () => {
         consoleOutput.scrollTop = consoleOutput.scrollHeight;
     }
 
+    // Control VM Action
+    window.controlVm = async function (uuid, action) {
+        addLog(`Sending ${action} to VM...`, 'system');
+
+        try {
+            const res = await fetch('/api/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ vm_uuid: uuid, action: action })
+            });
+            const data = await res.json();
+
+            if (res.status === 202) {
+                addLog(`Success: Command accepted.`, 'success');
+                // Trigger immediate status refresh
+                setTimeout(fetchStatus, 500);
+            } else {
+                addLog(`Error: ${data.message || 'Unknown error'}`, 'error');
+            }
+        } catch (e) {
+            addLog(`Request Failed: ${e}`, 'error');
+        }
+    };
+
+    // Event Delegation for Dynamic Buttons
+    document.addEventListener('click', (e) => {
+        if (e.target && e.target.classList.contains('btn-control')) {
+            const uuid = e.target.dataset.uuid;
+            const action = e.target.dataset.action;
+            if (uuid && action) {
+                window.controlVm(uuid, action);
+            }
+        }
+    });
+
     const cpuTempEl = document.getElementById('cpu-temp');
     const cpuUnitEl = document.getElementById('cpu-unit');
 
@@ -36,6 +71,21 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Failed to fetch temp', e);
             cpuTempEl.textContent = "--";
         }
+    }
+
+    function getActionsHtml(vm) {
+        let btns = '';
+        const uuid = vm.vm_uuid;
+
+        if (vm.dashboard_status === 'Running') {
+            btns += `<button class="btn-sm btn-control" data-uuid="${uuid}" data-action="stop_graceful" title="Graceful Shutdown">Stop</button>`;
+            btns += `<button class="btn-sm btn-control" data-uuid="${uuid}" data-action="reboot_graceful" title="Reboot">Reboot</button>`;
+            btns += `<button class="btn-sm btn-control danger" data-uuid="${uuid}" data-action="stop_force" title="Force Stop">Kill</button>`;
+        } else if (vm.dashboard_status === 'Off' || vm.dashboard_status === 'Saved') {
+            btns += `<button class="btn-sm btn-control success" data-uuid="${uuid}" data-action="start">Start</button>`;
+        }
+
+        return `<div class="card-actions">${btns}</div>`;
     }
 
     async function fetchStatus() {
@@ -81,6 +131,20 @@ document.addEventListener('DOMContentLoaded', () => {
                         spans[0].textContent = vm.dashboard_status;
                         spans[1].textContent = vm.uptime_seconds !== null ? vm.uptime_seconds : '-';
                     }
+
+                    // Update actions
+                    const actionsDiv = card.querySelector('.card-actions');
+                    const newActionsStr = getActionsHtml(vm);
+                    if (actionsDiv) {
+                        if (actionsDiv.outerHTML !== newActionsStr) {
+                            actionsDiv.outerHTML = newActionsStr;
+                        }
+                    } else {
+                        // Fallback if missing
+                        const body = card.querySelector('.card-body');
+                        if (body) body.insertAdjacentHTML('beforeend', newActionsStr);
+                    }
+
                 } else {
                     // Create new
                     card = document.createElement('div');
@@ -96,6 +160,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="card-body">
                             <p>Status: <span>${vm.dashboard_status}</span></p>
                             <p>Uptime: <span>${vm.uptime_seconds !== null ? vm.uptime_seconds : '-'}</span></p>
+                            ${getActionsHtml(vm)}
                         </div>
                     `;
                     dashboard.insertBefore(card, cpuCard);
