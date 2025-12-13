@@ -4,18 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const consoleOutput = document.getElementById('console-output');
 
     // Status Elements
-    const statusMap = {
-        'AG-Lab-Win': {
-            status: document.getElementById('status-win'),
-            uptime: document.getElementById('uptime-win'),
-            indicator: document.querySelector('#card-win .status-indicator')
-        },
-        'AG-Lab-Linux': {
-            status: document.getElementById('status-linux'),
-            uptime: document.getElementById('uptime-linux'),
-            indicator: document.querySelector('#card-linux .status-indicator')
-        }
-    };
+    // Dynamic rendering replaces static statusMap
 
     // Polling Intervals
     let statusInterval;
@@ -29,24 +18,106 @@ document.addEventListener('DOMContentLoaded', () => {
         consoleOutput.scrollTop = consoleOutput.scrollHeight;
     }
 
+    const cpuTempEl = document.getElementById('cpu-temp');
+    const cpuUnitEl = document.getElementById('cpu-unit');
+
+    async function fetchCpuTemp() {
+        try {
+            const res = await fetch('/api/cputemp');
+            const data = await res.json();
+
+            if (data.temperature !== undefined) {
+                cpuTempEl.textContent = data.temperature;
+                cpuUnitEl.textContent = data.unit;
+            } else {
+                cpuTempEl.textContent = "ERR";
+            }
+        } catch (e) {
+            console.error('Failed to fetch temp', e);
+            cpuTempEl.textContent = "--";
+        }
+    }
+
     async function fetchStatus() {
         try {
             const res = await fetch('/api/status');
             const data = await res.json();
 
-            data.forEach(vm => {
-                const els = statusMap[vm.name];
-                if (els) {
-                    els.status.textContent = vm.status;
-                    els.uptime.textContent = vm.uptime;
+            if (!Array.isArray(data)) return;
 
-                    // Update indicator
-                    els.indicator.className = 'status-indicator'; // reset
-                    if (vm.status === 'Running') els.indicator.classList.add('running');
-                    else if (vm.status === 'Off') els.indicator.classList.add('off');
-                    else els.indicator.classList.add('unknown');
+            const dashboard = document.getElementById('dashboard-grid');
+            const cpuCard = document.getElementById('card-cputemp');
+
+            if (!dashboard || !cpuCard) return;
+
+            // Track current VM IDs in data
+            const currentVmIds = new Set(data.map(vm => vm.vm_uuid));
+
+            // 1. Remove cards not in data
+            document.querySelectorAll('.vm-card').forEach(card => {
+                const uuid = card.dataset.uuid;
+                if (!currentVmIds.has(uuid)) {
+                    card.remove();
                 }
             });
+
+            // 2. Update or Create
+            data.forEach(vm => {
+                let card = document.getElementById(`vm-${vm.vm_uuid}`);
+                let statusClass = 'unknown';
+                if (vm.dashboard_status === 'Running') statusClass = 'running';
+                else if (vm.dashboard_status === 'Off') statusClass = 'off';
+
+                if (card) {
+                    // Update existing
+                    const h3 = card.querySelector('h3');
+                    if (h3) h3.textContent = vm.display_name;
+
+                    const indicator = card.querySelector('.status-indicator');
+                    if (indicator) indicator.className = `status-indicator ${statusClass}`;
+
+                    const spans = card.querySelectorAll('.card-body span');
+                    if (spans.length >= 2) {
+                        spans[0].textContent = vm.dashboard_status;
+                        spans[1].textContent = vm.uptime_seconds !== null ? vm.uptime_seconds : '-';
+                    }
+                } else {
+                    // Create new
+                    card = document.createElement('div');
+                    card.className = 'card vm-card';
+                    card.id = `vm-${vm.vm_uuid}`;
+                    card.dataset.uuid = vm.vm_uuid;
+
+                    card.innerHTML = `
+                        <div class="card-header">
+                            <div class="status-indicator ${statusClass}"></div>
+                            <h3>${vm.display_name}</h3>
+                        </div>
+                        <div class="card-body">
+                            <p>Status: <span>${vm.dashboard_status}</span></p>
+                            <p>Uptime: <span>${vm.uptime_seconds !== null ? vm.uptime_seconds : '-'}</span></p>
+                        </div>
+                    `;
+                    dashboard.insertBefore(card, cpuCard);
+                }
+            });
+
+            // Handle empty state
+            const emptyMsg = document.getElementById('no-vms-msg');
+            if (data.length === 0) {
+                if (!emptyMsg) {
+                    const msg = document.createElement('p');
+                    msg.id = 'no-vms-msg';
+                    msg.style.gridColumn = "1 / -1";
+                    msg.style.textAlign = "center";
+                    msg.style.color = "var(--text-secondary)";
+                    msg.textContent = "No virtual machines found.";
+                    dashboard.insertBefore(msg, cpuCard);
+                }
+            } else {
+                if (emptyMsg) emptyMsg.remove();
+            }
+
         } catch (e) {
             console.error('Failed to fetch status', e);
         }
@@ -91,7 +162,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initial Status Check
     fetchStatus();
-    statusInterval = setInterval(fetchStatus, 5000);
+    fetchCpuTemp();
+    statusInterval = setInterval(() => {
+        fetchStatus();
+        fetchCpuTemp();
+    }, 5000);
     // Poll logs gently
     logInterval = setInterval(pollLogs, 2000);
 });
