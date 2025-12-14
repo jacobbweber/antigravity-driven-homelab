@@ -29,6 +29,16 @@
             <section class="dashboard" id="dashboard-grid">
                 <!-- VM Cards will be injected here dynamically -->
 
+                <div class="card" id="card-hoststats">
+                    <div class="card-header">
+                        <h3>Host Resources</h3>
+                    </div>
+                    <div class="card-body">
+                        <p>CPU Load: <span id="host-cpu-load">--</span>%</p>
+                        <p>Memory: <span id="host-mem-used">--</span> / <span id="host-mem-total">--</span> GB</p>
+                    </div>
+                </div>
+
                 <div class="card" id="card-cputemp">
                     <div class="card-header">
                         <h3>Host CPU Temp</h3>

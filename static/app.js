@@ -56,6 +56,27 @@ document.addEventListener('DOMContentLoaded', () => {
     const cpuTempEl = document.getElementById('cpu-temp');
     const cpuUnitEl = document.getElementById('cpu-unit');
 
+    const hostCpuEl = document.getElementById('host-cpu-load');
+    const hostMemUsedEl = document.getElementById('host-mem-used');
+    const hostMemTotalEl = document.getElementById('host-mem-total');
+
+    async function fetchHostStats() {
+        try {
+            const res = await fetch('/api/host/stats');
+            const data = await res.json();
+
+            if (data.host_stats) {
+                hostCpuEl.textContent = data.host_stats.cpu_utilization_percent;
+                hostMemUsedEl.textContent = data.host_stats.memory_used_gb;
+                hostMemTotalEl.textContent = data.host_stats.memory_total_gb;
+            } else {
+                hostCpuEl.textContent = "--";
+            }
+        } catch (e) {
+            console.error('Failed to fetch host stats', e);
+        }
+    }
+
     async function fetchCpuTemp() {
         try {
             const res = await fetch('/api/cputemp');
@@ -228,9 +249,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initial Status Check
     fetchStatus();
     fetchCpuTemp();
+    fetchHostStats();
     statusInterval = setInterval(() => {
         fetchStatus();
         fetchCpuTemp();
+        fetchHostStats();
     }, 5000);
     // Poll logs gently
     logInterval = setInterval(pollLogs, 2000);

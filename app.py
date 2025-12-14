@@ -119,6 +119,28 @@ def get_cpu_temp():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/host/stats')
+def get_host_stats():
+    """Runs Get-HostStats.ps1 and returns the JSON output."""
+    script_path = os.path.join(os.getcwd(), 'scripts', 'Get-HostStats.ps1')
+    try:
+        result = subprocess.run(
+            ["powershell", "-ExecutionPolicy", "Bypass", "-File", script_path],
+            capture_output=True,
+            text=True
+        )
+        if result.returncode != 0:
+             return jsonify({"error": "Failed to get host stats", "details": result.stderr}), 500
+        
+        try:
+            data = json.loads(result.stdout)
+            return jsonify(data)
+        except json.JSONDecodeError:
+             return jsonify({"error": "Invalid JSON from script", "raw": result.stdout}), 500
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/control', methods=['POST'])
 def control_vm():
     """Runs Control-VMState.ps1 to change VM state."""
