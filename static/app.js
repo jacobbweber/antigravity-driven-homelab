@@ -257,4 +257,83 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 5000);
     // Poll logs gently
     logInterval = setInterval(pollLogs, 2000);
+
+    // Modal & Provisioning Logic
+    const modal = document.getElementById('provision-modal');
+    const btnNewVm = document.getElementById('btn-new-vm');
+    const closeSpan = document.querySelector('.close-modal');
+    const btnCancel = document.querySelector('.cancel-modal');
+    const provisionForm = document.getElementById('provision-form');
+
+    if (btnNewVm) {
+        btnNewVm.onclick = () => {
+            modal.classList.remove('hidden');
+        };
+    }
+
+    function closeModal() {
+        if (modal) modal.classList.add('hidden');
+    }
+
+    if (closeSpan) closeSpan.onclick = closeModal;
+    if (btnCancel) btnCancel.onclick = closeModal;
+
+    window.onclick = (event) => {
+        if (event.target == modal) {
+            closeModal();
+        }
+    }
+
+    if (provisionForm) {
+        provisionForm.onsubmit = async (e) => {
+            e.preventDefault();
+
+            const vmName = document.getElementById('vm-name').value;
+            const vmCpu = document.getElementById('vm-cpu').value;
+            const vmRam = document.getElementById('vm-ram').value;
+            const vmSwitch = document.getElementById('vm-switch').value;
+            const vmDisk = document.getElementById('vm-disk').value;
+
+            addLog('Submitting Provisioning Request...', 'system');
+
+            const payload = {
+                provisioning_request: {
+                    num_vms: 1,
+                    vms: [{
+                        vm_name: vmName,
+                        cpu_cores: parseInt(vmCpu),
+                        ram_startup_mb: parseInt(vmRam),
+                        network_adapter_name: vmSwitch,
+                        disk_template_path: vmDisk
+                    }]
+                }
+            };
+
+            try {
+                const res = await fetch('/api/vms/provision', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+
+                if (res.status === 202) {
+                    addLog(`Job Submitted. ID: ${data.provisioning_job_response.job_id}`, 'success');
+                    closeModal();
+                    // Start polling logs aggressively
+                    clearInterval(logInterval);
+                    logInterval = setInterval(pollLogs, 1000);
+                    // Reset form
+                    provisionForm.reset();
+                } else {
+                    addLog(`Error: ${data.error}`, 'error');
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (err) {
+                addLog(`Request Exception: ${err}`, 'error');
+                alert(`Request Failed: ${err}`);
+            }
+        };
+    }
 });

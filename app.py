@@ -3,6 +3,7 @@ import json
 import subprocess
 import threading
 import time
+import uuid
 from flask import Flask, render_template, jsonify, request
 from flask_cors import CORS
 
@@ -12,6 +13,7 @@ CORS(app)
 # Global Log Buffer
 LOG_BUFFER = []
 MAX_LOG_LINES = 1000
+JOBS = {}
 
 def append_log(message):
     global LOG_BUFFER
@@ -194,6 +196,105 @@ def control_vm():
 @app.route('/api/logs')
 def get_logs():
     return jsonify({"logs": LOG_BUFFER})
+
+
+def run_provision_job(job_id, vm_list):
+    try:
+        JOBS[job_id]['status'] = 'Provisioning'
+        append_log(f"[Job {job_id}] Starting provisioning of {len(vm_list)} VMs...")
+        
+        for vm in vm_list:
+            name = vm['vm_name']
+            cpu = str(vm['cpu_cores'])
+            ram = str(vm['ram_startup_mb'])
+            switch = vm.get('network_adapter_name', 'Default Switch')
+            disk_tmpl = vm.get('disk_template_path', '')
+            
+            append_log(f"[Job {job_id}] Provisioning {name}...")
+            
+            script_path = os.path.join(os.getcwd(), 'scripts', 'New-VM.ps1')
+            cmd = ["powershell", "-ExecutionPolicy", "Bypass", "-File", script_path, 
+                "-Name", name, "-CpuCores", cpu, "-RamStartupMB", ram, "-SwitchName", switch]
+            
+            if disk_tmpl:
+                cmd.extend(["-DiskTemplatePath", disk_tmpl])
+                
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            out, err = process.communicate()
+            
+            if process.returncode == 0:
+                append_log(f"[Job {job_id}] {name}: Success.")
+            else:
+                append_log(f"[Job {job_id}] Failed to create {name}. Error: {err.strip()}")
+                JOBS[job_id]['status'] = 'Failed'
+                return
+
+        JOBS[job_id]['status'] = 'Success'
+        append_log(f"[Job {job_id}] All VMs provisioned successfully.")
+    except Exception as e:
+        JOBS[job_id]['status'] = 'Failed'
+        append_log(f"[Job {job_id}] Unexpected error: {str(e)}")
+
+@app.route('/api/vms/provision', methods=['POST'])
+def provision_vms():
+    data = request.get_json()
+    if not data or 'provisioning_request' not in data:
+         return jsonify({"error": "Invalid payload"}), 400
+         
+    req = data['provisioning_request']
+    vms = req.get('vms', [])
+    
+    if not vms:
+        return jsonify({"error": "No VMs specified"}), 400
+        
+    total_cpu = 0
+    total_ram_mb = 0
+    for vm in vms:
+        total_cpu += int(vm.get('cpu_cores', 0))
+        total_ram_mb += int(vm.get('ram_startup_mb', 0))
+        if int(vm.get('ram_startup_mb', 0)) <= 0:
+             return jsonify({"error": f"Invalid RAM for {vm.get('vm_name')}"}), 400
+
+    script_path = os.path.join(os.getcwd(), 'scripts', 'Test-HostCapacity.ps1')
+    try:
+        res = subprocess.run(
+            ["powershell", "-ExecutionPolicy", "Bypass", "-File", script_path, "-RamMB", str(total_ram_mb), "-CpuCores", str(total_cpu)],
+            capture_output=True,
+            text=True
+        )
+        try:
+            validation = json.loads(res.stdout)
+            if not validation.get('valid'):
+                 return jsonify({"error": validation.get('message')}), 409
+        except json.JSONDecodeError:
+             return jsonify({"error": "Resource validation script returned invalid JSON", "details": res.stderr}), 500
+    except Exception as e:
+         return jsonify({"error": f"Validation failed: {str(e)}"}), 500
+
+    job_id = str(uuid.uuid4())
+    JOBS[job_id] = {'status': 'Submitted', 'params': req, 'logs': [], 'created_at': time.time()}
+    
+    thread = threading.Thread(target=run_provision_job, args=(job_id, vms))
+    thread.start()
+    
+    return jsonify({
+        "provisioning_job_response": {
+            "job_id": job_id,
+            "status": "Submitted",
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S")
+        }
+    }), 202
+
+@app.route('/api/jobs/<job_id>', methods=['GET'])
+def get_job_status(job_id):
+    job = JOBS.get(job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+    return jsonify({
+        "job_id": job_id,
+        "status": job['status'],
+        "created_at": job['created_at']
+    })
 
 if __name__ == '__main__':
     print("Starting Antigravity Homelab on http://localhost:5000")
